@@ -1,13 +1,16 @@
 #include <iostream>
 #include <random>
+#include "BigInt.h"
+
+typedef BigInt lngen;
 
 //binary exponentiation
-unsigned long long bin_pow(unsigned long long base, unsigned long long d, unsigned long long n) { 
+lngen bin_pow(lngen base, lngen d, lngen n = 1) { 
     if (d == 1) { 
         return base; 
     }
     if (d % 2 == 0) {
-        long long t = bin_pow(base, d / 2, n);
+        lngen t = bin_pow(base, d / 2, n);
         return t * t % n;
     }
     else {
@@ -15,11 +18,11 @@ unsigned long long bin_pow(unsigned long long base, unsigned long long d, unsign
     }
 }
 
-bool Miller_Rabin_test(unsigned long long p){
+bool Miller_Rabin_test(lngen p){
     std::random_device rd;
-    std::uniform_int_distribution<unsigned long long> testing_number(2, p - 2);
-    unsigned long long s, d, a;
-    unsigned long long x, y; 
+    std::uniform_int_distribution<lngen> testing_number(2, p - 2);
+    lngen s, d, a;
+    lngen x, y; 
     s = 0;
     d = p - 1;
 
@@ -32,7 +35,7 @@ bool Miller_Rabin_test(unsigned long long p){
         a = testing_number(rd);
 
         x = bin_pow(a, d, p);
-        for(int i = 0; i < s; i++){ 
+        for(lngen j = 0; j < s; j++){ 
             y = bin_pow(x, 2, p);
 
             if(y == 1 && x != 1 && x != p - 1){ return false; }
@@ -45,10 +48,10 @@ bool Miller_Rabin_test(unsigned long long p){
     return true;
 }
 
-unsigned long long random_prime(unsigned long long begin = 0, unsigned long long end = 1000){
+lngen random_prime(lngen begin = 0, lngen end = 1000){
     std::random_device rd;
-    std::uniform_int_distribution<unsigned long long> probably_prime(begin, end);
-    unsigned long long p;
+    std::uniform_int_distribution<lngen> probably_prime(begin, end);
+    lngen p;
 
     while(true){
         p = probably_prime(rd);
@@ -56,7 +59,35 @@ unsigned long long random_prime(unsigned long long begin = 0, unsigned long long
     }
 }
 
+lngen exgcd(lngen a, lngen b, lngen &x, lngen&y) {
+    
+    if (a == 0){ 
+        x = 0; 
+        y = 1; 
+        return b; 
+    } 
+
+    lngen x1, y1; 
+    lngen gcd = exgcd(b%a, a, x1, y1); 
+ 
+    x = y1 - (b/a) * x1; 
+    y = x1; 
+    return gcd; 
+} 
+
 int main(){
-    std::cout << random_prime(9000, 10000) << '\n';   
-    if(Miller_Rabin_test(1000*1000)){std::cout << "prime"; }
+    lngen x = 123, p, q, e, d = 1, t = 1, n, phi, ciphertext;
+    p = random_prime();
+    q = random_prime();
+    phi = (p - 1) * (q - 1);
+    n = p * q;
+    e = random_prime();
+
+    std:: cout << "p = " << p << " q = " << q << " phi = " << phi << " n = " << n << " e = " << e << '\n';
+    exgcd(e, phi, d, t);
+    std::cout << "d = " << d << '\n';
+    ciphertext = bin_pow(x, e, n);
+    std::cout << "ciphertext is " << ciphertext << '\n';
+    std::cout << bin_pow(ciphertext, d, n) << '\n';
+    std::cout << bin_pow(100, 5, 9);
 }
