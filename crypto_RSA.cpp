@@ -1,93 +1,133 @@
 #include <iostream>
-#include <random>
-#include "BigInt.h"
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int_distribution.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 
-typedef BigInt lngen;
+// Использование типа uint1024_t из библиотеки Boost для работы с большими числами
+typedef boost::multiprecision::int1024_t lngen;
 
-//binary exponentiation
-lngen bin_pow(lngen base, lngen d, lngen n = 1) { 
-    if (d == 1) { 
-        return base; 
+// Бинарное возведение в степень
+lngen bin_pow(lngen base, lngen exp, lngen mod) {
+    lngen result = 1;
+    base = base % mod;
+    while (exp > 0) {
+        if (exp % 2 == 1)
+            result = (result * base) % mod;
+        exp = exp >> 1;
+        base = (base * base) % mod;
     }
-    if (d % 2 == 0) {
-        lngen t = bin_pow(base, d / 2, n);
-        return t * t % n;
-    }
-    else {
-        return bin_pow(base, d - 1, n) * base % n;
-    }
+    return result;
 }
 
-bool Miller_Rabin_test(lngen p){
-    std::random_device rd;
-    std::uniform_int_distribution<lngen> testing_number(2, p - 2);
-    lngen s, d, a;
-    lngen x, y; 
-    s = 0;
-    d = p - 1;
+// Вероятностный тест Миллера-Рабина для проверки на псевдопростоту
+bool Miller_Rabin_test(lngen n, int k = 512) {
+    // Базовые проверки
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 == 0) return false;
 
-    while(d % 2 == 0){
+    // Разложение n-1 = 2^s * d
+    lngen d = n - 1;
+    int s = 0;
+    while (d % 2 == 0) {
+        d >>= 1;
         s++;
-        d = d/2;
     }
 
-    for(int i = 0; i <= 64; i++){
-        a = testing_number(rd);
+    // Инициализация генератора случайных чисел
+    boost::random::mt19937 gen;
+    boost::random::uniform_int_distribution<lngen> dis(2, n - 2);
 
-        x = bin_pow(a, d, p);
-        for(lngen j = 0; j < s; j++){ 
-            y = bin_pow(x, 2, p);
+    // Выполнение k тестов
+    for (int i = 0; i < k; i++) {
+        lngen a = dis(gen);
+        lngen x = bin_pow(a, d, n);
 
-            if(y == 1 && x != 1 && x != p - 1){ return false; }
-            x = y;
+        if (x == 1 || x == n - 1)
+            continue;
+
+        for (int j = 0; j < s - 1; j++) {
+            x = bin_pow(x, 2, n);
+            if (x == n - 1)
+                break;
         }
-
-        if(y != 1){ return false; }
+        if (x != n - 1)
+            return false;
     }
-
     return true;
 }
 
-lngen random_prime(lngen begin = 0, lngen end = 1000){
-    std::random_device rd;
-    std::uniform_int_distribution<lngen> probably_prime(begin, end);
+// Генерация псевдопростых чисел в заданном промежутке
+lngen random_prime(const lngen& begin, const lngen& end) {
+    // Проверка корректности диапазона
+    if (begin > end) {
+        std::cerr << "Ошибка: begin должен быть меньше или равен end." << std::endl;
+        exit(1);
+    }
+
+    // Инициализация генератора случайных чисел
+    boost::random::mt19937 gen;
+    boost::random::uniform_int_distribution<lngen> probably_prime(begin, end);
     lngen p;
 
-    while(true){
-        p = probably_prime(rd);
-        if(Miller_Rabin_test(p)){ return p; }       
+    while (true) {
+        p = probably_prime(gen);
+        if (Miller_Rabin_test(p)) {
+            return p;
+        }
     }
 }
 
-lngen exgcd(lngen a, lngen b, lngen &x, lngen&y) {
-    
-    if (a == 0){ 
-        x = 0; 
-        y = 1; 
-        return b; 
-    } 
+// Расширенный алгоритм Евклида
+lngen exgcd(lngen a, lngen b, lngen &x, lngen &y) {
+    if (a == 0) {
+        x = 0;
+        y = 1;
+        return b;
+    }
 
-    lngen x1, y1; 
-    lngen gcd = exgcd(b%a, a, x1, y1); 
- 
-    x = y1 - (b/a) * x1; 
-    y = x1; 
-    return gcd; 
-} 
+    lngen x1, y1;
+    lngen gcd = exgcd(b % a, a, x1, y1);
 
-int main(){
-    lngen x = 123, p, q, e, d = 1, t = 1, n, phi, ciphertext;
-    p = random_prime();
-    q = random_prime();
+    x = y1 - (b / a) * x1;
+    y = x1;
+    return gcd;
+}
+
+int main() {
+    lngen x = 12345, p, q, e, d = 1, t = 1, n, phi, ciphertext;
+    const lngen start = static_cast<lngen>(2) << 64, finish = static_cast<lngen>(2) << 66;
+
+    // Генерация двух больших псевдопростых чисел
+    p = random_prime(start, finish);
+    q = random_prime(start, finish);
+
+    // Вычисление значения функции Эйлера для n
     phi = (p - 1) * (q - 1);
     n = p * q;
-    e = random_prime();
 
-    std:: cout << "p = " << p << " q = " << q << " phi = " << phi << " n = " << n << " e = " << e << '\n';
+    // Выбор открытого ключа e
+    e = random_prime(phi, static_cast<lngen>(2) << 64);
+
+    std::cout << "p = " << p << " q = " << q << " phi = " << phi << " n = " << n << " e = " << e << '\n';
+
+    // Нахождение обратного элемента d для e по модулю phi
     exgcd(e, phi, d, t);
+    d = (d + phi) % phi;
+
     std::cout << "d = " << d << '\n';
+
+    // Шифрование сообщения x
     ciphertext = bin_pow(x, e, n);
     std::cout << "ciphertext is " << ciphertext << '\n';
+
+    // Дешифрование зашифрованного сообщения
     std::cout << bin_pow(ciphertext, d, n) << '\n';
-    std::cout << bin_pow(100, 5, 9);
+
+    // Проверка корректности ключей
+    std::cout << (d * e) % phi;
+
+    std::cout << "\n \n \n";
+    return 0;
 }
+
